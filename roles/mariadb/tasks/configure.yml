@@ -1,0 +1,20 @@
+---
+
+- name: stop mariadb
+  service:
+    name: mysql
+    state: stopped
+
+
+- name: copy server.cnf
+  template:
+    src: server.cnf.j2
+    dest: /etc/my.cnf.d/server.cnf
+
+
+- name: start mariadb
+  service:
+    name: mysql
+    state: started
+
+

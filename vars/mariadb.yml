@@ -1,0 +1,4 @@
+install_mode: install
+listen_nic: eth0
+db_passwd: password
+db_listen_port: 3306

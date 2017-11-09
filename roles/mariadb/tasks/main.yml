@@ -1,0 +1,14 @@
+- include: install.yml
+  when: install_mode == 'install'
+
+
+- include: configure.yml
+  when:
+    - install_mode == 'config'
+    - groups['mariadb_nodes'] | length == 1
+
+
+- include: configure_cluster.yml
+  when:
+    - install_mode == 'config'
+    - groups['mariadb_nodes'] | length > 1

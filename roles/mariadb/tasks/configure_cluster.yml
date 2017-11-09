@@ -1,0 +1,75 @@
+---
+
+- name: stop mariadb
+  service:
+    name: mariadb
+    state: stopped
+
+
+- name: copy server.cnf
+  template:
+    src: server_cluster.cnf.j2
+    dest: /etc/my.cnf.d/server.cnf
+
+
+- name: set local facts primary_node default to false
+  set_fact:
+    primary_node: 0
+
+
+- name: set primary_node on first host
+  set_fact:
+    primary_node: 1
+  when: item == groups['mariadb_nodes'][0]
+  with_items: "{{ansible_all_ipv4_addresses}}"
+
+
+- name: check grastate.dat exist on first host
+  shell: cat /var/lib/mysql/grastate.dat
+  register: grastate_exist
+  ignore_errors: yes
+  when: primary_node == True
+
+
+- name: check safe_to_bootstrap status on first host
+  shell: "cat /var/lib/mysql/grastate.dat | grep 'safe_to_bootstrap: 1'"
+  register: safe_to_bootstrap
+  ignore_errors: yes
+  when: primary_node == True
+
+
+- name: set safe_to_bootstrap=1 in grastate.dat on first host
+  shell: "sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' /var/lib/mysql/grastate.dat"  
+  when:
+    - primary_node == True
+    - grastate_exist.rc == 0
+    - safe_to_bootstrap.rc == 1
+
+
+- name: set environment _WSREP_NEW_CLUSTER on first host
+  shell: systemctl set-environment _WSREP_NEW_CLUSTER=--wsrep-new-cluster
+  when: primary_node == True
+
+
+- name: start mariadb cluster on first host
+  service:
+    name: mysql
+    state: started
+  when: primary_node == True
+
+
+- name: unset environment _WSREP_NEW_CLUSTER
+  shell: systemctl unset-environment _WSREP_NEW_CLUSTER
+
+
+- pause: seconds=10
+
+
+- name: join mariadb cluster
+  service:
+    name: mysql
+    state: started
+  when: primary_node == False
+  ignore_errors: yes
+
+

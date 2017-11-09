@@ -1,0 +1,124 @@
+---
+
+- name: check mariadb
+  shell: rpm -qa | grep MariaDB
+  register: check_mariadb
+  ignore_errors: yes
+
+
+- name: remove mariadb
+  yum:
+    name: "{{item}}"
+    state: absent
+  with_items:
+    - MariaDB*
+    - galera*
+  when: check_mariadb.rc == 0
+
+
+- name: remove mariadb directories
+  file:
+    path: "{{item}}"
+    state: absent
+    force: yes
+  with_items:
+    - /usr/share/mysql
+    - /usr/lib64/mysql
+    - /var/lib/mysql
+    - /etc/my.cnf.d
+  when: check_mariadb.rc == 0
+
+
+- name: copy repository
+  copy:
+    src: mariadb.repo
+    dest: /etc/yum.repos.d/mariadb.repo
+  when: ansible_os_family == 'RedHat'
+
+
+- name: install software-properties-common
+  apt:
+    name: "{{item}}"
+  with_items:
+    - software-properties-common
+  when: ansible_os_family == 'Debian'
+
+
+- name: add apt-key
+  shell: apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
+  when: ansible_os_family == 'Debian'
+
+
+- name: copy repository
+  copy:
+    src: mariadb.list
+    dest: /etc/apt/sources.list.d/mariadb.list
+  when: ansible_os_family == 'Debian'
+
+
+- name: install mariadb
+  yum:
+    name: "{{item}}"
+    state: present
+  with_items:
+    - MariaDB-server
+    - MariaDB-client
+  when: ansible_os_family == 'RedHat'
+
+
+- name: install mariadb
+  apt:
+    name: "{{item}}"
+    update_cache: yes
+  with_items:
+    - mariadb-server
+  when: ansible_os_family == 'Debian'
+
+
+- name: (configure_cluster) mkdir /var/log/mysql
+  file:
+    path: /var/log/mysql
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: 0755
+    recurse: yes
+
+
+- name: mkdir /var/run/mysqld
+  file:
+    path: /var/run/mysqld
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: 0755
+    recurse: yes
+
+
+- name: restart mariadb
+  service:
+    name: mariadb
+    state: restarted
+
+
+- name: change default root password
+  shell: mysqladmin -uroot --password='' password {{db_passwd}}
+
+
+- name: add root user at %
+  shell: mysql -uroot -p{{db_passwd}} -e "CREATE USER 'root'@'%' IDENTIFIED BY '{{db_passwd}}';"
+  ignore_errors: yes
+
+
+- name: grant 'root'@'%'
+  shell: mysql -uroot -p{{db_passwd}} -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';"
+
+
+- name: delete mysql users without password
+  shell: mysql -uroot -p{{db_passwd}} -e "DELETE FROM mysql.user WHERE Password='';"
+
+
+- name: FLUSH PRIVILEGES
+  shell: mysql -uroot -p{{db_passwd}} -e "FLUSH PRIVILEGES;"
+
+
